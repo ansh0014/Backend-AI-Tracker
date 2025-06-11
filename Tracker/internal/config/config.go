@@ -4,9 +4,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
+
+// ConfigError represents a configuration-specific error
+type ConfigError struct {
+	Field   string
+	Message string
+	Err     error
+}
+
+func (e *ConfigError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("config error in %s: %s: %v", e.Field, e.Message, e.Err)
+	}
+	return fmt.Sprintf("config error in %s: %s", e.Field, e.Message)
+}
 
 // Config holds the application configuration
 type Config struct {
@@ -32,7 +47,11 @@ func LoadConfig() (*Config, error) {
 	// Get the current working directory
 	dir, err := os.Getwd()
 	if err != nil {
-		return nil, fmt.Errorf("error getting current directory: %v", err)
+		return nil, &ConfigError{
+			Field:   "working_directory",
+			Message: "failed to get current directory",
+			Err:     err,
+		}
 	}
 
 	// Look for .env file in the current directory and parent directories
@@ -41,13 +60,20 @@ func LoadConfig() (*Config, error) {
 		// Try parent directory
 		envPath = filepath.Join(dir, "..", ".env")
 		if _, err := os.Stat(envPath); os.IsNotExist(err) {
-			return nil, fmt.Errorf(".env file not found")
+			return nil, &ConfigError{
+				Field:   "env_file",
+				Message: ".env file not found in current or parent directory",
+			}
 		}
 	}
 
 	// Load .env file
 	if err := godotenv.Load(envPath); err != nil {
-		return nil, fmt.Errorf("error loading .env file: %v", err)
+		return nil, &ConfigError{
+			Field:   "env_file",
+			Message: "failed to load .env file",
+			Err:     err,
+		}
 	}
 
 	config := &Config{
@@ -78,9 +104,50 @@ func LoadConfig() (*Config, error) {
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
-	if c.GeminiApiKey == "" {
-		return fmt.Errorf("GEMINI_API_KEY is required")
+	var errors []string
+
+	// Validate Server configuration
+	if c.Port == "" {
+		errors = append(errors, "PORT is required")
 	}
+	if c.Env == "" {
+		errors = append(errors, "ENV is required")
+	}
+	if !isValidEnvironment(c.Env) {
+		errors = append(errors, fmt.Sprintf("invalid ENV value: %s (must be one of: development, production, testing)", c.Env))
+	}
+
+	// Validate MongoDB configuration
+	if c.MongoURI == "" {
+		errors = append(errors, "MONGODB_URI is required")
+	}
+	if c.MongoDBName == "" {
+		errors = append(errors, "MONGODB_DB is required")
+	}
+	if c.MongoCollection == "" {
+		errors = append(errors, "MONGODB_COLLECTION is required")
+	}
+
+	// Validate Gemini AI configuration
+	if c.GeminiApiKey == "" {
+		errors = append(errors, "GEMINI_API_KEY is required")
+	}
+	if c.GeminiModel == "" {
+		errors = append(errors, "GEMINI_MODEL is required")
+	}
+
+	// Validate Logging configuration
+	if !isValidLogLevel(c.LogLevel) {
+		errors = append(errors, fmt.Sprintf("invalid LOG_LEVEL: %s (must be one of: debug, info, warn, error)", c.LogLevel))
+	}
+
+	if len(errors) > 0 {
+		return &ConfigError{
+			Field:   "validation",
+			Message: fmt.Sprintf("configuration validation failed: %s", strings.Join(errors, "; ")),
+		}
+	}
+
 	return nil
 }
 
@@ -90,6 +157,27 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// isValidEnvironment checks if the environment value is valid
+func isValidEnvironment(env string) bool {
+	validEnvs := map[string]bool{
+		"development": true,
+		"production":  true,
+		"testing":     true,
+	}
+	return validEnvs[env]
+}
+
+// isValidLogLevel checks if the log level is valid
+func isValidLogLevel(level string) bool {
+	validLevels := map[string]bool{
+		"debug": true,
+		"info":  true,
+		"warn":  true,
+		"error": true,
+	}
+	return validLevels[level]
 }
 
 // GetMongoURI returns the MongoDB URI
