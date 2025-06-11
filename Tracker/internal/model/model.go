@@ -6,23 +6,55 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Activity represents a user activity
-type Activity struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Title       string             `bson:"title" json:"title"`
-	Description string             `bson:"description" json:"description"`
-	Category    string             `bson:"category" json:"category"`
-	Duration    int                `bson:"duration" json:"duration"` // in minutes
-	Date        time.Time          `bson:"date" json:"date"`
-	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
+// Event represents a user activity event
+type Event struct {
+	ID        primitive.ObjectID     `bson:"_id,omitempty" json:"id"`
+	UserID    string                 `bson:"userId" json:"userId"`
+	Type      string                 `bson:"type" json:"type"`
+	Timestamp time.Time              `bson:"timestamp" json:"timestamp"`
+	Metadata  map[string]interface{} `bson:"metadata" json:"metadata"`
 }
 
-// ActivityRequest represents the request body for creating/updating an activity
-type ActivityRequest struct {
-	Title       string `json:"title" binding:"required"`
-	Description string `json:"description"`
-	Category    string `json:"category" binding:"required"`
-	Duration    int    `json:"duration" binding:"required"`
-	Date        string `json:"date" binding:"required"`
+// Activity represents a collection of events with AI analysis
+type Activity struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    string             `bson:"userId" json:"userId"`
+	StartTime time.Time          `bson:"startTime" json:"startTime"`
+	EndTime   time.Time          `bson:"endTime" json:"endTime"`
+	Events    []Event            `bson:"events" json:"events"`
+	Analysis  *Analysis          `bson:"analysis" json:"analysis"`
+	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
 }
+
+// Analysis represents AI-generated analysis of user activity
+type Analysis struct {
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID       string             `bson:"userId" json:"userId"`
+	ActivityID   primitive.ObjectID `bson:"activityId" json:"activityId"`
+	BehaviorType string             `bson:"behaviorType" json:"behaviorType"`
+	Confidence   float64            `bson:"confidence" json:"confidence"`
+	Summary      string             `bson:"summary" json:"summary"`
+	Tags         []string           `bson:"tags" json:"tags"`
+	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
+}
+
+// BehaviorType constants
+const (
+	BehaviorFocused      = "focused"
+	BehaviorIdle         = "idle"
+	BehaviorMultitasking = "multitasking"
+	BehaviorDistracted   = "distracted"
+)
+
+// EventType constants
+const (
+	EventMouseMove  = "mouse_move"
+	EventClick      = "click"
+	EventKeyPress   = "key_press"
+	EventScroll     = "scroll"
+	EventTabFocus   = "tab_focus"
+	EventTabBlur    = "tab_blur"
+	EventPageLoad   = "page_load"
+	EventPageUnload = "page_unload"
+)
