@@ -1,0 +1,43 @@
+# Server Configuration
+# The port on which the server will listen
+# Default: 8080
+PORT=8080
+
+# Application Environment
+# Must be one of: development, production, testing
+# Default: development
+ENV=development
+
+# MongoDB Configuration
+# Connection URI for MongoDB
+# Format: mongodb://[username:password@]host[:port]/[database]
+# Default: mongodb://localhost:27017
+MONGODB_URI=mongodb://localhost:27017
+
+# MongoDB Database Name
+# The name of the database to use
+# Default: activity_tracker
+MONGODB_DB=activity_tracker
+
+# MongoDB Collection Name
+# The name of the collection to use
+# Default: activities
+MONGODB_COLLECTION=activities
+
+# Gemini AI Configuration
+# Your Gemini API key from Google AI Studio
+# Get it from: https://makersuite.google.com/app/apikey
+# Required: true
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Gemini Model Name
+# The model to use for AI operations
+# Default: gemini-pro
+# Options: gemini-pro, gemini-pro-vision
+GEMINI_MODEL=gemini-pro
+
+# Logging Configuration
+# Log level for the application
+# Must be one of: debug, info, warn, error
+# Default: info
+LOG_LEVEL=info
