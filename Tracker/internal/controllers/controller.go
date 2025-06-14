@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -12,29 +13,131 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // ActivityController handles activity-related operations
 type ActivityController struct {
-	aiService *services.AIService
+	aiService    *services.AIService
+	eventService *services.EventProcessor
 }
 
 // NewActivityController creates a new activity controller
 func NewActivityController() (*ActivityController, error) {
-	aiService, err := services.NewAIService()
+	aiService, err := services.NewAIService(30 * time.Second)
 	if err != nil {
 		return nil, err
 	}
+
+	analyzer := services.NewActivityAnalyzer(aiService)
+	eventProcessor := services.NewEventProcessor(analyzer)
+
 	return &ActivityController{
-		aiService: aiService,
+		aiService:    aiService,
+		eventService: eventProcessor,
 	}, nil
+}
+
+// AnalyzeActivity analyzes user activity patterns
+func (c *ActivityController) AnalyzeActivity(ctx *gin.Context) {
+	userID := ctx.Param("userID")
+	if userID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
+		return
+	}
+
+	// Get time range from query params, default to last 5 minutes
+	endTime := time.Now()
+	startTime := endTime.Add(-5 * time.Minute)
+
+	if timeRange := ctx.Query("timeRange"); timeRange != "" {
+		duration, err := time.ParseDuration(timeRange)
+		if err == nil {
+			startTime = endTime.Add(-duration)
+		}
+	}
+
+	// Get recent events
+	events := c.eventService.GetRecentEvents(userID, endTime.Sub(startTime))
+
+	// Perform analysis
+	analysis, err := c.eventService.ProcessBatchEvents(ctx, userID, events)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, analysis)
+}
+
+// GetActivitySummary retrieves activity summary for a user
+func (c *ActivityController) GetActivitySummary(ctx *gin.Context) {
+	userID := ctx.Param("userID")
+	if userID == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
+		return
+	}
+
+	// Set up options for aggregation
+	opts := options.Aggregate().SetMaxTime(2 * time.Second)
+
+	// Create pipeline for activity summary
+	pipeline := []bson.M{
+		{
+			"$match": bson.M{
+				"user_id": userID,
+				"created_at": bson.M{
+					"$gte": time.Now().Add(-24 * time.Hour),
+				},
+			},
+		},
+		{
+			"$group": bson.M{
+				"_id":             nil,
+				"totalActivities": bson.M{"$sum": 1},
+				"totalDuration":   bson.M{"$sum": "$duration"},
+				"categories": bson.M{
+					"$addToSet": "$category",
+				},
+			},
+		},
+	}
+
+	cursor, err := database.GetCollection().Aggregate(ctx, pipeline, opts)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to aggregate activities"})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var summaries []bson.M
+	if err = cursor.All(ctx, &summaries); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode summary"})
+		return
+	}
+
+	if len(summaries) == 0 {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "No activities found"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, summaries[0])
 }
 
 // CreateActivity creates a new activity
 func (c *ActivityController) CreateActivity(ctx *gin.Context) {
 	var req model.ActivityRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request: " + err.Error(),
+			"fields": map[string]string{
+				"title":    "required",
+				"category": "required",
+				"duration": "required, must be greater than 0",
+				"date":     "required, format: YYYY-MM-DD",
+			},
+		})
 		return
 	}
 
@@ -178,15 +281,60 @@ func (c *ActivityController) DeleteActivity(ctx *gin.Context) {
 func (c *ActivityController) GetSuggestions(ctx *gin.Context) {
 	preferences := ctx.Query("preferences")
 	if preferences == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Preferences are required"})
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "Preferences parameter is required",
+			"details": map[string]string{
+				"preferences": "Query parameter 'preferences' must be provided",
+				"example":     "/api/suggestions?preferences=productivity,focus",
+			},
+		})
 		return
 	}
 
-	suggestions, err := c.aiService.GetActivitySuggestions(preferences)
+	// Create context with timeout
+	reqCtx, cancel := context.WithTimeout(ctx.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	suggestions, err := c.aiService.GetActivitySuggestions(reqCtx, preferences)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		HandleError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"suggestions": suggestions})
+	if len(suggestions) == 0 {
+		ctx.JSON(http.StatusOK, gin.H{
+			"suggestions": []string{},
+			"message":     "No suggestions found for given preferences",
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"suggestions": suggestions,
+		"count":       len(suggestions),
+		"preferences": preferences,
+	})
+}
+
+// HandleError is a helper function to handle common errors
+func HandleError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "Resource not found"})
+	case errors.Is(err, context.DeadlineExceeded):
+		ctx.JSON(http.StatusGatewayTimeout, gin.H{"error": "Request timeout"})
+	default:
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// Close safely closes the controller's resources
+func (c *ActivityController) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := c.aiService.Close(ctx); err != nil {
+		return err
+	}
+	return nil
 }

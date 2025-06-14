@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"github.com/gin-gonic/gin"
 	"sync"
 	"time"
 )
@@ -12,6 +13,10 @@ type EventProcessor struct {
 	mutex     sync.RWMutex
 	batchSize int
 	analyzer  *ActivityAnalyzer
+}
+
+func (p *EventProcessor) ProcessBatchEvents(ctx *gin.Context, userID string, events []UserEvent) (any, any) {
+	panic("unimplemented")
 }
 
 // NewEventProcessor creates a new event processor instance

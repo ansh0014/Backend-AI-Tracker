@@ -39,6 +39,15 @@ type Analysis struct {
 	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 }
 
+// ActivityRequest represents the incoming request for activity operations
+type ActivityRequest struct {
+	Title       string  `bson:"title" binding:"required"`
+	Description string  `bson:"description"`
+	Category    string  `bson:"category" binding:"required"`
+	Duration    float64 `bson:"duration" binding:"required,gt=0"`
+	Date        string  `bson:"date" binding:"required"`
+}
+
 // BehaviorType constants
 const (
 	BehaviorFocused      = "focused"
