@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -64,11 +65,18 @@ func (c *ActivityController) AnalyzeActivity(ctx *gin.Context) {
 	// Perform analysis
 	analysis, err := c.eventService.ProcessBatchEvents(ctx, userID, events)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		HandleError(ctx, fmt.Errorf("failed to analyze activity: %v", err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, analysis)
+	// Return successful response
+	ctx.JSON(http.StatusOK, gin.H{
+		"analysis": analysis,
+		"timeFrame": gin.H{
+			"start": startTime,
+			"end":   endTime,
+		},
+	})
 }
 
 // GetActivitySummary retrieves activity summary for a user

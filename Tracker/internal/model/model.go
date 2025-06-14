@@ -16,17 +16,18 @@ type Event struct {
 }
 
 // Activity represents a collection of events with AI analysis
-type Activity struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    string             `bson:"userId" json:"userId"`
-	StartTime time.Time          `bson:"startTime" json:"startTime"`
-	EndTime   time.Time          `bson:"endTime" json:"endTime"`
-	Events    []Event            `bson:"events" json:"events"`
-	Analysis  *Analysis          `bson:"analysis" json:"analysis"`
-	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
-}
 
+type Activity struct {
+    ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+    Title       string            `bson:"title" json:"title"`
+    Description string            `bson:"description" json:"description"`
+    Category    string            `bson:"category" json:"category"`
+    Duration    float64           `bson:"duration" json:"duration"`
+    Date        time.Time         `bson:"date" json:"date"`
+    UserID      string            `bson:"userId" json:"userId"`
+    CreatedAt   time.Time         `bson:"createdAt" json:"createdAt"`
+    UpdatedAt   time.Time         `bson:"updatedAt" json:"updatedAt"`
+}
 // Analysis represents AI-generated analysis of user activity
 type Analysis struct {
 	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
@@ -41,12 +42,14 @@ type Analysis struct {
 
 // ActivityRequest represents the incoming request for activity operations
 type ActivityRequest struct {
-	Title       string  `bson:"title" binding:"required"`
-	Description string  `bson:"description"`
-	Category    string  `bson:"category" binding:"required"`
-	Duration    float64 `bson:"duration" binding:"required,gt=0"`
-	Date        string  `bson:"date" binding:"required"`
+    Title       string  `json:"title" binding:"required"`
+    Description string  `json:"description"`
+    Category    string  `json:"category" binding:"required"`
+    Duration    float64 `json:"duration" binding:"required,gt=0"`
+    Date        string  `json:"date" binding:"required"`
+    UserID      string  `json:"userId" binding:"required"`
 }
+
 
 // BehaviorType constants
 const (
