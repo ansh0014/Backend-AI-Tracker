@@ -199,3 +199,12 @@ func GetMongoCollectionName() string {
 func GetGeminiApiKey() string {
 	return os.Getenv("GEMINI_API_KEY")
 }
+
+// GetGeminiModel returns the Gemini model name
+func GetGeminiModel() string {
+	model := os.Getenv("GEMINI_MODEL")
+	if model == "" {
+		return "gemini-pro"
+	}
+	return model
+}

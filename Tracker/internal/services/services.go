@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -14,75 +15,94 @@ import (
 type AIService struct {
 	client *genai.Client
 	model  *genai.GenerativeModel
+	ctx    context.Context
 }
 
-// NewAIService creates a new AI service instance
-func NewAIService() (*AIService, error) {
-	ctx := context.Background()
+// NewAIService creates a new AI service instance with timeout context
+func NewAIService(timeout time.Duration) (*AIService, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	// Get Gemini API key from config
 	apiKey := config.GetGeminiApiKey()
 	if apiKey == "" {
-		return nil, fmt.Errorf("Gemini API key not found")
+		return nil, fmt.Errorf("gemini API key not found")
 	}
 
-	// Create Gemini client
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gemini client: %v", err)
 	}
 
-	// Get model from config or use default
-	modelName := config.GetGeminiApiKey()
+	modelName := config.GetGeminiModel() // Add this to config package
 	if modelName == "" {
 		modelName = "gemini-pro"
 	}
 
-	// Initialize the model
 	model := client.GenerativeModel(modelName)
+	model.SetTemperature(0.7) // Add some creativity while keeping responses focused
 
 	return &AIService{
 		client: client,
 		model:  model,
+		ctx:    context.Background(),
 	}, nil
 }
 
-// GetActivitySuggestions generates activity suggestions based on user preferences
-func (s *AIService) GetActivitySuggestions(preferences string) ([]string, error) {
-	ctx := context.Background()
+// GetActivitySuggestions generates activity suggestions with context and safety checks
+func (s *AIService) GetActivitySuggestions(ctx context.Context, preferences string) ([]string, error) {
+	if preferences == "" {
+		return nil, fmt.Errorf("preferences cannot be empty")
+	}
 
-	prompt := "Based on these preferences: " + preferences + "\nSuggest 5 activities that would be suitable. Format each suggestion as a single line."
+	prompt := fmt.Sprintf(`Based on these preferences: %s
+Generate 5 specific activities that would be suitable.
+Format each suggestion as a clear, actionable item on a new line.
+Focus on productive and healthy activities.`, preferences)
 
-	// Generate content
 	resp, err := s.model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %v", err)
+		return nil, fmt.Errorf("content generation failed: %v", err)
 	}
 
-	// Get the response text
-	response := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+		return nil, fmt.Errorf("no valid response generated")
+	}
 
-	// Split the response into individual suggestions
+	response := resp.Candidates[0].Content.Parts[0].(genai.Text)
 	suggestions := strings.Split(string(response), "\n")
 
-	// Clean up suggestions (remove empty lines and numbers)
-	cleanSuggestions := make([]string, 0)
-	for _, suggestion := range suggestions {
-		suggestion = strings.TrimSpace(suggestion)
-		if suggestion != "" {
-			// Remove leading numbers and dots if present
-			suggestion = strings.TrimLeft(suggestion, "0123456789. ")
-			cleanSuggestions = append(cleanSuggestions, suggestion)
-		}
-	}
-
-	return cleanSuggestions, nil
+	return cleanSuggestions(suggestions), nil
 }
 
-// Close closes the AI service client
-func (s *AIService) Close() error {
+// cleanSuggestions helper function to process suggestions
+func cleanSuggestions(raw []string) []string {
+	clean := make([]string, 0, len(raw))
+	for _, suggestion := range raw {
+		suggestion = strings.TrimSpace(suggestion)
+		if suggestion == "" {
+			continue
+		}
+		// Remove leading numbers, dots, and dashes
+		suggestion = strings.TrimLeft(suggestion, "0123456789.-• ")
+		clean = append(clean, suggestion)
+	}
+	return clean
+}
+
+// Close safely closes the AI service client with context
+func (s *AIService) Close(ctx context.Context) error {
 	if s.client != nil {
-		return s.client.Close()
+		errChan := make(chan error, 1)
+		go func() {
+			errChan <- s.client.Close()
+		}()
+
+		select {
+		case err := <-errChan:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	return nil
 }
