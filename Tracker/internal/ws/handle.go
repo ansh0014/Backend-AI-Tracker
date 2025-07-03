@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"Tracker/internal/model"
+
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
@@ -47,7 +48,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create new client
-	client := NewClient(conn, userID)
+	client := NewClient(conn, userID, h.manager)
 	h.manager.RegisterClient(client)
 
 	// Start goroutines for reading and writing
@@ -57,17 +58,18 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // Client represents a WebSocket client
 type Client struct {
-	conn     *websocket.Conn
-	userID   string
-	manager  *Manager
-	send     chan []byte
+	conn    *websocket.Conn
+	userID  string
+	manager *Manager
+	send    chan []byte
 }
 
 // NewClient creates a new WebSocket client
-func NewClient(conn *websocket.Conn, userID string) *Client {
+func NewClient(conn *websocket.Conn, userID string, manager *Manager) *Client {
 	return &Client{
 		conn:    conn,
 		userID:  userID,
+		manager: manager,
 		send:    make(chan []byte, 256),
 	}
 }
@@ -109,18 +111,20 @@ func (c *Client) WritePump() {
 	defer func() {
 		c.conn.Close()
 	}()
-
-	for {
-		select {
-		case message, ok := <-c.send:
-			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-
-			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				return
+		for {
+			select {
+			case message, ok := <-c.send:
+				if !ok {
+					// The channel was closed, so close the WebSocket connection
+					_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+					return
+				}
+	
+				// Send the message to the WebSocket connection
+				if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+					return
+				}
 			}
 		}
 	}
-}
+
