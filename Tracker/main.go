@@ -6,7 +6,11 @@ import (
 	"os"
 
 	"Tracker/internal/config"
-	routes "Tracker/router" // Changed from "Tracker/router" to "Tracker/routes"
+	"Tracker/internal/database"
+	ws "Tracker/internal/ws"
+	routes "Tracker/router"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -16,8 +20,24 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Initialize database
+	if err := database.InitDB(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Initialize WebSocket manager and start it
+	manager := ws.NewManager()
+	go manager.Run()
+
 	// Initialize router
-	router := routes.SetupRouter() // Removed .Routes() call
+	router := routes.SetupRouter()
+
+	// Add WebSocket endpoint
+	router.GET("/ws", func(c *gin.Context) {
+		manager := ws.NewManager() // Use the already created manager
+		handler := ws.NewHandler(manager)
+		handler.HandleWebSocket(c.Writer, c.Request)
+	})
 
 	// Start server
 	port := os.Getenv("PORT")
