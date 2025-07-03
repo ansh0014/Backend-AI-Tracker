@@ -1,7 +1,7 @@
 # Server Configuration
 # The port on which the server will listen
-# Default: 8080
-PORT=8080
+# Default: 8000
+PORT=8000
 
 # Application Environment
 # Must be one of: development, production, testing
