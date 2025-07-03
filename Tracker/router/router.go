@@ -2,12 +2,13 @@ package routes
 
 import (
 	"Tracker/internal/controllers"
+	"Tracker/internal/ws"
 
 	"github.com/gin-gonic/gin"
 )
 
 // SetupRouter configures all the routes for the application
-func SetupRouter() *gin.Engine {
+func SetupRouter(manager *ws.Manager) *gin.Engine {
 	router := gin.Default()
 
 	// Enable CORS
@@ -39,6 +40,12 @@ func SetupRouter() *gin.Engine {
 
 	// AI suggestions route
 	router.GET("/api/suggestions", activityController.GetSuggestions)
+
+	// WebSocket endpoint
+	wsHandler := ws.NewHandler(manager)
+	router.GET("/ws", func(c *gin.Context) {
+		wsHandler.HandleWebSocket(c.Writer, c.Request)
+	})
 
 	return router
 }

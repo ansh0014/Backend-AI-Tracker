@@ -30,11 +30,11 @@ func main() {
 	go manager.Run()
 
 	// Initialize router
-	router := routes.SetupRouter()
+	router := routes.SetupRouter(manager)
 
 	// Add WebSocket endpoint
 	router.GET("/ws", func(c *gin.Context) {
-		manager := ws.NewManager() // Use the already created manager
+		// Use the already created manager
 		handler := ws.NewHandler(manager)
 		handler.HandleWebSocket(c.Writer, c.Request)
 	})
