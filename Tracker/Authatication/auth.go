@@ -10,7 +10,9 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
+	"context"
 )
 
 // User represents the user model
@@ -193,4 +195,89 @@ func RefreshToken(tokenString string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(getJWTSecret()))
+}
+
+
+// LoginResponse represents the login response
+type LoginResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
+// RegisterHandler handles user registration
+func RegisterHandler(c *gin.Context) {
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Hash the password
+	hashedPassword, err := HashPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		return
+	}
+
+	// Create new user
+	user := &User{
+		ID:       primitive.NewObjectID().Hex(),
+		Email:    req.Email,
+		Password: hashedPassword,
+		Role:     req.Role,
+	}
+
+	// Generate token
+	token, err := GenerateToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, LoginResponse{
+		Token: token,
+		User:  *user,
+	})
+}
+
+// LoginHandler handles user login
+func LoginHandler(c *gin.Context) {
+	var req LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// TODO: Implement user lookup from database
+	// For now, we'll return an error
+	c.JSON(http.StatusNotImplemented, gin.H{"error": "Login not implemented"})
+}
+
+// RefreshTokenHandler handles token refresh requests
+func RefreshTokenHandler(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+		return
+	}
+
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header format must be Bearer {token}"})
+		return
+	}
+
+	tokenString := parts[1]
+	newToken, err := RefreshToken(tokenString)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": newToken})
+}
+
+// Helper function to add claims to context
+func AddClaimsToContext(ctx context.Context, claims *Claims) context.Context {
+	return context.WithValue(ctx, "claims", claims)
 }
