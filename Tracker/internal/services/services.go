@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
+	
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -18,34 +18,24 @@ type AIService struct {
 	ctx    context.Context
 }
 
-// NewAIService creates a new AI service instance with timeout context
-func NewAIService(timeout time.Duration) (*AIService, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 
-	apiKey := config.GetGeminiApiKey()
-	if apiKey == "" {
-		return nil, fmt.Errorf("gemini API key not found")
+// InitializeGeminiClient sets up the Gemini AI client using config.
+func InitializeGeminiClient(ctx context.Context, cfg *config.Config) (*genai.Client, string, error) {
+	if cfg.GeminiApiKey == "" {
+		return nil, "", fmt.Errorf("Gemini API key not found in configuration")
 	}
 
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(cfg.GeminiApiKey))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Gemini client: %v", err)
+		return nil, "", fmt.Errorf("failed to create Gemini client: %v", err)
 	}
 
-	modelName := config.GetGeminiModel() // Add this to config package
-	if modelName == "" {
-		modelName = "gemini-pro"
+	model := cfg.GeminiModel
+	if model == "" {
+		model = "gemini-pro"
 	}
 
-	model := client.GenerativeModel(modelName)
-	model.SetTemperature(0.7) // Add some creativity while keeping responses focused
-
-	return &AIService{
-		client: client,
-		model:  model,
-		ctx:    context.Background(),
-	}, nil
+	return client, model, nil
 }
 
 // GetActivitySuggestions generates activity suggestions with context and safety checks
