@@ -2,9 +2,12 @@ package services
 
 import (
 	"context"
-	"github.com/gin-gonic/gin"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // EventProcessor handles real-time event processing
@@ -15,8 +18,24 @@ type EventProcessor struct {
 	analyzer  *ActivityAnalyzer
 }
 
-func (p *EventProcessor) ProcessBatchEvents(ctx *gin.Context, userID string, events []UserEvent) (any, any) {
-	panic("unimplemented")
+func (p *EventProcessor) ProcessBatchEvents(ctx *gin.Context, userID string, events []UserEvent) (*ActivityAnalysis, error) {
+	if len(events) == 0 {
+		return nil, errors.New("no events to process")
+	}
+
+	// Group events by type
+	eventsByType := make(map[string][]UserEvent)
+	for _, event := range events {
+		eventsByType[event.Type] = append(eventsByType[event.Type], event)
+	}
+
+	// Analyze patterns
+	analysis, err := p.analyzer.AnalyzeActivity(ctx.Request.Context(), userID, events)
+	if err != nil {
+		return nil, fmt.Errorf("analysis failed: %v", err)
+	}
+
+	return analysis, nil
 }
 
 // NewEventProcessor creates a new event processor instance

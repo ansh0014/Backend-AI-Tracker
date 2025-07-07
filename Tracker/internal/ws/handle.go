@@ -128,3 +128,15 @@ func (c *Client) WritePump() {
 		}
 	}
 
+func handleWSError(conn *websocket.Conn, err error) {
+    errMsg := struct {
+        Type    string `json:"type"`
+        Message string `json:"message"`
+    }{
+        Type:    "error",
+        Message: err.Error(),
+    }
+    
+    conn.WriteJSON(errMsg)
+}
+

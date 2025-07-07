@@ -208,3 +208,10 @@ func GetGeminiModel() string {
 	}
 	return model
 }
+
+func (c *Config) ValidateEnvironment() error {
+    if c.Env != "development" && c.Env != "production" && c.Env != "testing" {
+        return fmt.Errorf("invalid environment: %s", c.Env)
+    }
+    return nil
+}

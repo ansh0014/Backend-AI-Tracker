@@ -18,6 +18,28 @@ type AIService struct {
 	ctx    context.Context
 }
 
+// NewAIService creates a new AI service instance
+func NewAIService() (*AIService, error) {
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %v", err)
+	}
+
+	ctx := context.Background()
+	client, modelName, err := InitializeGeminiClient(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Gemini client: %v", err)
+	}
+
+	model := client.GenerativeModel(modelName)
+
+	return &AIService{
+		client: client,
+		model:  model,
+		ctx:    ctx,
+	}, nil
+}
+
 
 // InitializeGeminiClient sets up the Gemini AI client using config.
 func InitializeGeminiClient(ctx context.Context, cfg *config.Config) (*genai.Client, string, error) {

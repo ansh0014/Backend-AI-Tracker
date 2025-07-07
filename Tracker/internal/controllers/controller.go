@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"Tracker/internal/database"
@@ -26,7 +27,7 @@ type ActivityController struct {
 
 // NewActivityController creates a new activity controller
 func NewActivityController() (*ActivityController, error) {
-	aiService, err := services.AIService(30 * time.Second)
+	aiService, err := services.NewAIService()
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +178,12 @@ func (c *ActivityController) CreateActivity(ctx *gin.Context) {
 
 // GetActivities retrieves all activities
 func (c *ActivityController) GetActivities(ctx *gin.Context) {
-	cursor, err := database.GetCollection().Find(context.Background(), bson.M{})
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
+	skip := (page - 1) * limit
+
+	opts := options.Find().SetSkip(int64(skip)).SetLimit(int64(limit))
+	cursor, err := database.GetCollection().Find(context.Background(), bson.M{}, opts)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
